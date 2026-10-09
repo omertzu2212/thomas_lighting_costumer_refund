@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>מעקב החזרי לקוחות</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@5.22.0/lib/msal-browser.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAF8F4;
+    --surface: #FFFFFF;
+    --surface-2: #F3EFE7;
+    --border: #E6DFD2;
+    --ink: #262218;
+    --ink-secondary: #5B5445;
+    --ink-muted: #8C8371;
+    --accent: #B9791E;
+    --accent-ink: #FFFFFF;
+    --accent-wash: #FBEEDA;
+    --danger: #B4432E;
+    --danger-wash: #F8E7E2;
+    --success: #3F7D52;
+    --shadow: 0 1px 2px rgba(38,34,24,0.06), 0 4px 16px rgba(38,34,24,0.05);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #171510;
+      --surface: #211E17;
+      --surface-2: #2A261D;
+      --border: #3A352A;
+      --ink: #F2EEE4;
+      --ink-secondary: #C9C0AC;
+      --ink-muted: #948A75;
+      --accent: #E3A64C;
+      --accent-ink: #201804;
+      --accent-wash: #362B15;
+      --danger: #E08268;
+      --danger-wash: #3A231D;
+      --success: #7FC493;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171510;
+    --surface: #211E17;
+    --surface-2: #2A261D;
+    --border: #3A352A;
+    --ink: #F2EEE4;
+    --ink-secondary: #C9C0AC;
+    --ink-muted: #948A75;
+    --accent: #E3A64C;
+    --accent-ink: #201804;
+    --accent-wash: #362B15;
+    --danger: #E08268;
+    --danger-wash: #3A231D;
+    --success: #7FC493;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.35);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { background: var(--bg); }
+
+  body {
+    color: var(--ink);
+    font-family: 'Heebo', -apple-system, 'Segoe UI', Arial, sans-serif;
+    direction: rtl;
+    padding-inline: 20px;
+    padding-block: 24px 48px;
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+
+  .page-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 22px;
+  }
+  .page-head h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .page-head .sub {
+    color: var(--ink-muted);
+    font-size: 13.5px;
+  }
+  .head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .account-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    background: var(--surface);
+  }
+  .status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-muted); }
+  .status-pill.live .dot { background: var(--success); }
+  .status-pill.err .dot { background: var(--danger); }
+
+  /* KPI row */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi::before {
+    content: "";
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0; bottom: 0;
+    width: 3px;
+    background: var(--accent);
+  }
+  .kpi .label {
+    font-size: 12.5px;
+    color: var(--ink-secondary);
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+  .kpi .value {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    font-variant-numeric: proportional-nums;
+  }
+  .kpi .note {
+    margin-top: 4px;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+
+  /* Filter bar */
+  .filters {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+  .filters-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .filters-head h2 { font-size: 14.5px; font-weight: 700; }
+  .filters-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+  }
+  .field label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink-secondary);
+    margin-bottom: 5px;
+  }
+  .field .range-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .field .range-row span { color: var(--ink-muted); font-size: 12px; }
+  input, select, textarea {
+    width: 100%;
+    font-family: inherit;
+    font-size: 13.5px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .btn {
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .btn:hover { filter: brightness(0.97); }
+  .btn.primary {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: transparent;
+  }
+  .btn.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--ink-secondary);
+  }
+  .btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+  .btn.small { padding: 5px 9px; font-size: 12px; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+
+  .filters-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .filters-actions .count {
+    font-size: 12.5px;
+    color: var(--ink-muted);
+  }
+
+  /* Table section */
+  .table-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .table-head h2 { font-size: 14.5px; font-weight: 700; }
+
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  table { border-collapse: collapse; width: 100%; min-width: 1080px; }
+  thead th {
+    text-align: right;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--ink-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    padding: 11px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    cursor: pointer;
+    user-select: none;
+  }
+  thead th .arrow { color: var(--accent); margin-inline-start: 3px; }
+  tbody td {
+    padding: 10px 12px;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.notes { color: var(--ink-secondary); max-width: 220px; }
+  td.actions { white-space: nowrap; }
+  .reason-pill {
+    display: inline-block;
+    font-size: 12px;
+    padding: 3px 9px;
+    border-radius: 100px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--ink-secondary);
+    white-space: nowrap;
+  }
+  .empty-state {
+    padding: 46px 20px;
+    text-align: center;
+    color: var(--ink-muted);
+    font-size: 14px;
+  }
+  .row-edit input, .row-edit select { min-width: 90px; }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(20,17,10,0.45);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 40px 16px;
+    overflow-y: auto;
+    z-index: 50;
+  }
+  .modal {
+    background: var(--surface);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    width: 100%;
+    max-width: 640px;
+    padding: 22px 24px;
+  }
+  .modal h2 { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .modal .modal-sub { font-size: 12.5px; color: var(--ink-muted); margin-bottom: 16px; }
+  .modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .modal-grid .full { grid-column: 1 / -1; }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .field-err { color: var(--danger); font-size: 11.5px; margin-top: 4px; display: none; }
+  .field.has-err input, .field.has-err select { border-color: var(--danger); }
+  .field.has-err .field-err { display: block; }
+
+  .fab-row { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+
+  /* dd/mm/yyyy date field wrapper */
+  .date-field{position:relative;display:inline-flex;align-items:center;gap:6px;width:100%;}
+  .date-field .date-native-proxy{
+    position:absolute !important;left:0;top:0;
+    width:1px !important;height:1px !important;padding:0 !important;margin:0 !important;border:0 !important;
+    opacity:0 !important;pointer-events:none !important;
+  }
+  .date-display{flex:1;}
+  .date-pick-btn{
+    flex:none;width:32px;height:32px;border-radius:9px;border:1px solid var(--border);
+    background:var(--surface-2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;padding:0;
+  }
+
+  @media (max-width: 980px) {
+    .filters-grid { grid-template-columns: repeat(2, 1fr); }
+    .kpis { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .modal-grid { grid-template-columns: 1fr; }
+    body { padding-inline: 14px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- מסך כניסה - מוצג כל עוד אין התחברות פעילה -->
+  <div class="modal-backdrop" id="msGateOverlay" style="display:none;">
+    <div class="modal">
+      <h2>התחברות נדרשת</h2>
+      <p style="font-size:13.5px; color:var(--ink-secondary); margin: 10px 0 0;">יש להתחבר עם חשבון Microsoft של הארגון (תומס תאורה) כדי לראות ולערוך את נתוני ההחזרים המשותפים.</p>
+      <div class="modal-actions">
+        <button class="btn primary" id="btnSignIn" type="button">התחברות עם Microsoft</button>
+      </div>
+      <div id="msGateError" style="color:var(--danger); margin-top:10px; font-size:12.5px;"></div>
+    </div>
+  </div>
+
+  <div class="page-head">
+    <div>
+      <h1>מעקב החזרי לקוחות</h1>
+      <div class="sub">תומס תאורה &middot; מערכת מרכזית לרישום ומעקב אחר החזרים כספיים ללקוחות</div>
+    </div>
+    <div class="head-right">
+      <span id="msAccountBox" class="account-box" hidden>
+        <span id="msAccountLabel"></span>
+        <button class="btn ghost small" id="btnSignOut" type="button">התנתקות</button>
+      </span>
+      <div id="statusPill" class="status-pill"><span class="dot"></span><span id="statusText">מתחבר…</span></div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">סה"כ החזרים שנרשמו</div>
+      <div class="value" id="kpiCount">–</div>
+      <div class="note" id="kpiCountNote">&nbsp;</div>
+    </div>
+    <div class="kpi">
+      <div class="label">סה"כ סכום עסקאות</div>
+      <div class="value" id="kpiTxn">–</div>
+      <div class="note">&nbsp;</div>
+    </div>
+    <div class="kpi">
+      <div class="label">סה"כ סכום החזרים</div>
+      <div class="value" id="kpiRefund">–</div>
+      <div class="note" id="kpiRefundNote">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="filters-head">
+      <h2>חיפוש וסינון</h2>
+      <button class="btn ghost small" id="clearFiltersBtn" type="button">נקה סינון</button>
+    </div>
+    <div class="filters-grid">
+      <div class="field">
+        <label for="fDateFrom">תאריך החזר &ndash; מ</label>
+        <div class="range-row">
+          <input type="date" id="fDateFrom">
+        </div>
+      </div>
+      <div class="field">
+        <label for="fDateTo">תאריך החזר &ndash; עד</label>
+        <div class="range-row">
+          <input type="date" id="fDateTo">
+        </div>
+      </div>
+      <div class="field">
+        <label for="fCustomer">שם לקוח</label>
+        <input type="text" id="fCustomer" placeholder="חיפוש לפי שם לקוח…">
+      </div>
+      <div class="field">
+        <label for="fArchitect">שם אדריכל</label>
+        <select id="fArchitect"><option value="">הכל</option></select>
+      </div>
+      <div class="field">
+        <label for="fSalesperson">איש מכירות</label>
+        <select id="fSalesperson"><option value="">הכל</option></select>
+      </div>
+      <div class="field" style="grid-column: span 2;">
+        <label for="fReason">סיבת החזר</label>
+        <select id="fReason"><option value="">הכל</option></select>
+      </div>
+    </div>
+    <div class="filters-actions">
+      <div class="count" id="filterSummary">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="fab-row">
+    <button class="btn primary" id="openAddBtn" type="button">+ הוספת החזר חדש</button>
+  </div>
+
+  <div class="table-head">
+    <h2>רשומות החזר</h2>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-sort="customerCode">מס' לקוח</th>
+          <th data-sort="customerName">שם לקוח</th>
+          <th data-sort="transactionAmount">סכום עסקה</th>
+          <th data-sort="salesperson">איש מכירות</th>
+          <th data-sort="refundDate">תאריך החזר</th>
+          <th data-sort="refundAmount">סכום להחזר</th>
+          <th data-sort="refundReason">סיבת החזר</th>
+          <th data-sort="architectName">שם אדריכל</th>
+          <th>הערות</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="10"><div class="empty-state">טוען נתונים…</div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="modalRoot"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // =====================================================================
+  // קבועים לפרויקט - למלא לפני פריסה (ראו ההוראות שנמסרו בנפרד)
+  // =====================================================================
+  var MSAL_CLIENT_ID = 'REPLACE_WITH_APPLICATION_CLIENT_ID';   // Application (client) ID מ-Entra
+  var MSAL_TENANT_ID = 'REPLACE_WITH_DIRECTORY_TENANT_ID';     // Directory (tenant) ID מ-Entra
+  var GRAPH_SCOPES = ['Files.ReadWrite', 'Sites.Read.All', 'Sites.ReadWrite.All', 'User.Read'];
+
+  var EXCEL_FILE_NAME = 'refunds-database.xlsx';
+  var SHARE_URL = 'REPLACE_WITH_SHAREPOINT_SHARE_LINK';        // קישור שיתוף (Copy link) של הקובץ - גיבוי לאיתור
+
+  var SP_HOSTNAME = 'REPLACE_WITH_COMPANY.sharepoint.com';
+  var SP_SITE_PATH = '/sites/REPLACE_WITH_SITE_NAME';
+  var SP_FILE_PATH = 'REPLACE_WITH_FOLDER/' + EXCEL_FILE_NAME;
+  var GRAPH_FILE_ID_KEY = 'thomas-refunds-graph-file-id-v1';   // מזהה קאש ייחודי לפרויקט הזה
+
+  var REFUNDS_TABLE = 'Refunds';
+  var REFUNDS_COLUMNS = ['id', 'customerCode', 'customerName', 'transactionAmount', 'salesperson',
+                          'refundDate', 'refundAmount', 'refundReason', 'architectName', 'notes'];
+
+  var msalInstance = null;
+  var graphAvailable = false;
+  var graphAccessToken = null;
+  var graphFileId = null;
+  var graphDriveId = null;
+  var graphSessionId = null;
+  var graphPollTimer = null;
+
+  // =====================================================================
+  // State ו-UI helpers
+  // =====================================================================
+  var state = {
+    records: [],
+    dataReady: false,
+    sortField: "refundDate",
+    sortDir: "desc",
+    editingId: null,
+    deletingId: null,
+    filters: { dateFrom: "", dateTo: "", customer: "", architect: "", salesperson: "", reason: "" }
+  };
+
+  var REASON_SUGGESTIONS_ID = "reasonOptionsList";
+  var ARCHITECT_SUGGESTIONS_ID = "architectOptionsList";
+  var SALES_SUGGESTIONS_ID = "salesOptionsList";
+
+  function fmtCurrency(v) {
+    if (v === null || v === undefined || v === "" || isNaN(v)) return "—";
+    try {
+      return new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 0 }).format(v);
+    } catch (e) { return "₪" + v; }
+  }
+  function fmtDate(iso) {
+    if (!iso) return "—";
+    var parts = String(iso).split("-");
+    if (parts.length !== 3) return iso;
+    return parts[2] + "." + parts[1] + "." + parts[0];
+  }
+  function esc(s) {
+    if (s === null || s === undefined) return "";
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function setStatus(kind, text) {
+    var pill = document.getElementById("statusPill");
+    pill.className = "status-pill" + (kind ? " " + kind : "");
+    document.getElementById("statusText").textContent = text;
+  }
+
+  // =====================================================================
+  // מיפוי אובייקט ⇄ שורת Excel (לפי סדר REFUNDS_COLUMNS)
+  // =====================================================================
+  function toNumOrNull(v) {
+    if (v === null || v === undefined || v === "") return null;
+    var n = Number(v);
+    return isNaN(n) ? null : n;
+  }
+  function toStr(v) { return (v === null || v === undefined) ? "" : String(v); }
+
+  function rowToObj(vals) {
+    var o = {};
+    REFUNDS_COLUMNS.forEach(function (k, i) { o[k] = vals[i]; });
+    return {
+      id: toStr(o.id),
+      customerCode: toStr(o.customerCode),
+      customerName: toStr(o.customerName),
+      transactionAmount: toNumOrNull(o.transactionAmount),
+      salesperson: toStr(o.salesperson),
+      refundDate: toStr(o.refundDate),
+      refundAmount: toNumOrNull(o.refundAmount),
+      refundReason: toStr(o.refundReason),
+      architectName: toStr(o.architectName),
+      notes: toStr(o.notes)
+    };
+  }
+  function objToRow(o) {
+    return REFUNDS_COLUMNS.map(function (k) {
+      var v = o[k];
+      if (v === null || v === undefined) return "";
+      return v;
+    });
+  }
+
+  // =====================================================================
+  // MSAL - התחברות (redirect, לא popup - ראו טבלת תקלות ידועות)
+  // =====================================================================
+  async function initMsal() {
+    if (!window.msal) return false;
+    try {
+      msalInstance = new msal.PublicClientApplication({
+        auth: {
+          clientId: MSAL_CLIENT_ID,
+          authority: 'https://login.microsoftonline.com/' + MSAL_TENANT_ID,
+          redirectUri: window.location.origin + window.location.pathname,
+        },
+        cache: { cacheLocation: 'localStorage' }
+      });
+      await msalInstance.initialize();
+      try {
+        var response = await msalInstance.handleRedirectPromise();
+        if (response && response.accessToken) {
+          graphAccessToken = response.accessToken;
+          await activateGraphMode(response.account);
+        }
+      } catch (e) { console.error('redirect handling error', e); }
+      return true;
+    } catch (e) { console.error('msal init error', e); return false; }
+  }
+
+  async function acquireGraphTokenSilent() {
+    var accounts = msalInstance.getAllAccounts();
+    if (!accounts.length) return null;
+    try { return await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] }); }
+    catch (e) { return null; }
+  }
+
+  async function signInWithMicrosoft() {
+    try {
+      Object.keys(sessionStorage).forEach(function (k) {
+        if (k.indexOf('interaction.status') !== -1) sessionStorage.removeItem(k);
+      });
+    } catch (e) {}
+    try {
+      await msalInstance.loginRedirect({ scopes: GRAPH_SCOPES }); // מנווט את הטאב - שום דבר אחרי זה לא ירוץ
+    } catch (e) {
+      document.getElementById('msGateError').textContent = 'ההתחברות נכשלה: ' + (e && e.message ? e.message : e);
+    }
+  }
+
+  async function signOutMicrosoft() {
+    if (graphPollTimer) clearInterval(graphPollTimer);
+    try { localStorage.removeItem(GRAPH_FILE_ID_KEY); } catch (e) {}
+    try {
+      var accounts = msalInstance ? msalInstance.getAllAccounts() : [];
+      if (accounts.length) { await msalInstance.logoutRedirect({ account: accounts[0] }); return; }
+    } catch (e) {}
+    location.reload();
+  }
+
+  async function init() {
+    setStatus("", "מתחבר…");
+    var msalReady = await initMsal();
+    if (graphAvailable) return;
+    if (msalReady) {
+      var silent = await acquireGraphTokenSilent();
+      if (silent) { graphAccessToken = silent.accessToken; await activateGraphMode(silent.account); return; }
+      document.getElementById('msGateOverlay').style.display = 'flex';
+      setStatus("", "לא מחובר");
+      return;
+    }
+    setStatus("err", "שגיאה בטעינת ספריית ההתחברות");
+  }
+
+  // =====================================================================
+  // Microsoft Graph - fetch, session, איתור הקובץ
+  // =====================================================================
+  async function graphFetch(path, options) {
+    options = options || {};
+    var headers = Object.assign({ 'Authorization': 'Bearer ' + graphAccessToken, 'Content-Type': 'application/json' }, options.headers || {});
+    if (graphSessionId && path.indexOf('/workbook/') !== -1) headers['workbook-session-id'] = graphSessionId;
+    var res = await fetch('https://graph.microsoft.com/v1.0' + path, Object.assign({}, options, { headers: headers }));
+    if (!res.ok) {
+      var text = await res.text().catch(function () { return ''; });
+      throw new Error('Graph ' + res.status + ': ' + text);
+    }
+    var text2 = await res.text().catch(function () { return ''; });
+    if (!text2) return null;
+    try { return JSON.parse(text2); } catch (e) { return null; }
+  }
+
+  function encodeShareUrl(url) {
+    var b64 = btoa(unescape(encodeURIComponent(url)));
+    var b64url = b64.replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-');
+    return 'u!' + b64url;
+  }
+
+  function driveItemBase() {
+    return (graphDriveId ? ('/drives/' + graphDriveId) : '/me/drive') + '/items/' + graphFileId;
+  }
+
+  async function findWorkbookFile() {
+    var cachedRaw = localStorage.getItem(GRAPH_FILE_ID_KEY);
+    if (cachedRaw) {
+      try {
+        var cached = JSON.parse(cachedRaw);
+        if (cached && cached.id) { graphDriveId = cached.driveId || null; return cached.id; }
+      } catch (e) {}
+    }
+    try {
+      var site = await graphFetch('/sites/' + SP_HOSTNAME + ':' + SP_SITE_PATH);
+      if (site && site.id) {
+        var encodedFilePath = SP_FILE_PATH.split('/').map(encodeURIComponent).join('/');
+        var item = await graphFetch('/sites/' + site.id + '/drive/root:/' + encodedFilePath);
+        if (item && item.id && item.parentReference && item.parentReference.driveId) {
+          graphDriveId = item.parentReference.driveId;
+          localStorage.setItem(GRAPH_FILE_ID_KEY, JSON.stringify({ id: item.id, driveId: graphDriveId }));
+          return item.id;
+        }
+      }
+    } catch (e) { console.error('SharePoint site/path resolve failed', e); }
+    try {
+      var token = encodeShareUrl(SHARE_URL);
+      var item2 = await graphFetch('/shares/' + token + '/driveItem');
+      if (item2 && item2.id && item2.parentReference && item2.parentReference.driveId) {
+        graphDriveId = item2.parentReference.driveId;
+        localStorage.setItem(GRAPH_FILE_ID_KEY, JSON.stringify({ id: item2.id, driveId: graphDriveId }));
+        return item2.id;
+      }
+    } catch (e) { console.error('share link resolve failed', e); }
+    throw new Error('workbook-not-found');
+  }
+
+  async function createWorkbookSession() {
+    try {
+      var res = await graphFetch(driveItemBase() + '/workbook/createSession', {
+        method: 'POST', body: JSON.stringify({ persistChanges: true })
+      });
+      return (res && res.id) || null;
+    } catch (e) { console.error('createSession failed', e); return null; }
+  }
+
+  // =====================================================================
+  // CRUD על טבלת Refunds
+  // =====================================================================
+  async function graphReadTable(tableName) {
+    var data = await graphFetch(driveItemBase() + '/workbook/tables/' + tableName + '/rows');
+    return (data.value || []).map(function (r) { return r.values[0]; });
+  }
+  async function graphAddRow(tableName, values) {
+    await graphFetch(driveItemBase() + '/workbook/tables/' + tableName + '/rows', {
+      method: 'POST', body: JSON.stringify({ values: [values] })
+    });
+  }
+  async function graphFindRowIndex(tableName, id) {
+    var rows = await graphReadTable(tableName);
+    for (var i = 0; i < rows.length; i++) { if (String(rows[i][0]) === String(id)) return i; }
+    return -1;
+  }
+  async function graphUpdateRowAt(tableName, index, values) {
+    await graphFetch(driveItemBase() + '/workbook/tables/' + tableName + '/rows/' + index, {
+      method: 'PATCH', body: JSON.stringify({ values: [values] })
+    });
+  }
+  // חשוב: מחיקה בשיטה הישירה נכשלת עם ApiNotFound בקבצים ב-SharePoint הפתוחים לעריכה משותפת.
+  // הפתרון: למחוק דרך ה-Range של השורה בגיליון, לא דרך ה-API של הטבלה.
+  async function graphDeleteRowAt(tableName, index) {
+    var base = driveItemBase() + '/workbook/tables/' + tableName + '/rows/';
+    try {
+      var rangeInfo = await graphFetch(base + 'itemAt(index=' + index + ')/range');
+      var address = rangeInfo && rangeInfo.address;
+      if (!address) throw new Error('row-range-not-found');
+      var bangIdx = address.lastIndexOf('!');
+      var sheetNameRaw = bangIdx > -1 ? address.slice(0, bangIdx) : null;
+      var cellAddress = bangIdx > -1 ? address.slice(bangIdx + 1) : address;
+      var sheetName = sheetNameRaw ? sheetNameRaw.replace(/^'+|'+$/g, '') : null;
+      if (!sheetName) throw new Error('row-sheet-not-found');
+      await graphFetch(
+        driveItemBase() + '/workbook/worksheets/' + encodeURIComponent(sheetName) + "/range(address='" + encodeURIComponent(cellAddress) + "')/delete",
+        { method: 'POST', body: JSON.stringify({ shift: 'Up' }) }
+      );
+    } catch (e3) {
+      try {
+        await graphFetch(base + index, { method: 'DELETE' });
+      } catch (e1) {
+        try {
+          await graphFetch(base + 'itemAt(index=' + index + ')/delete', { method: 'POST' });
+        } catch (e2) {
+          throw new Error('range/delete failed: [' + e3.message + '] | DELETE failed: [' + e1.message + '] | itemAt/delete failed: [' + e2.message + ']');
+        }
+      }
+    }
+  }
+
+  // =====================================================================
+  // טעינה מ-Graph + הפעלת מצב מחובר
+  // =====================================================================
+  async function loadFromGraph() {
+    var rows = await graphReadTable(REFUNDS_TABLE);
+    state.records = rows.map(rowToObj);
+    state.dataReady = true;
+    setStatus("live", "מחובר · נתונים משותפים לכל הצוות");
+    populateFilterOptions();
+    render();
+  }
+
+  async function activateGraphMode(account) {
+    document.getElementById('msGateOverlay').style.display = 'none';
+    document.getElementById('msAccountBox').hidden = false;
+    document.getElementById('msAccountLabel').textContent = (account && (account.username || account.name)) || '';
+    try {
+      graphFileId = await findWorkbookFile();
+      graphSessionId = await createWorkbookSession();
+      await loadFromGraph();
+      graphAvailable = true;
+      if (graphPollTimer) clearInterval(graphPollTimer);
+      graphPollTimer = setInterval(function () { loadFromGraph().catch(function (e) { console.error('poll error', e); }); }, 25000);
+    } catch (e) {
+      console.error('graph activation error', e);
+      document.getElementById('msAccountBox').hidden = true;
+      setStatus("err", "לא הצלחנו לאתר את קובץ ה-Excel");
+      renderEmpty("לא הצלחנו לאתר את קובץ ה-Excel. ודאו שהקובץ קיים במיקום שהוגדר בקוד.");
+    }
+  }
+
+  // =====================================================================
+  // רשימות ערכים נגזרות (לסינון ולהשלמה אוטומטית)
+  // =====================================================================
+  function uniqueSorted(field) {
+    var set = {};
+    state.records.forEach(function (r) { if (r[field]) set[r[field]] = true; });
+    return Object.keys(set).sort(function (a, b) { return a.localeCompare(b, "he"); });
+  }
+
+  function populateFilterOptions() {
+    fillSelect("fArchitect", uniqueSorted("architectName"), state.filters.architect);
+    fillSelect("fSalesperson", uniqueSorted("salesperson"), state.filters.salesperson);
+    fillSelect("fReason", uniqueSorted("refundReason"), state.filters.reason);
+    fillDatalist(ARCHITECT_SUGGESTIONS_ID, uniqueSorted("architectName"));
+    fillDatalist(SALES_SUGGESTIONS_ID, uniqueSorted("salesperson"));
+    fillDatalist(REASON_SUGGESTIONS_ID, uniqueSorted("refundReason"));
+  }
+
+  function fillSelect(id, values, current) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var html = '<option value="">הכל</option>';
+    values.forEach(function (v) {
+      html += '<option value="' + esc(v) + '"' + (v === current ? " selected" : "") + ">" + esc(v) + "</option>";
+    });
+    el.innerHTML = html;
+  }
+
+  function fillDatalist(id, values) {
+    var el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("datalist");
+      el.id = id;
+      document.getElementById("modalRoot").appendChild(el);
+    }
+    el.innerHTML = values.map(function (v) { return '<option value="' + esc(v) + '">'; }).join("");
+  }
+
+  // =====================================================================
+  // סינון ומיון
+  // =====================================================================
+  function getFiltered() {
+    var f = state.filters;
+    var customerQuery = f.customer.trim().toLowerCase();
+    return state.records.filter(function (r) {
+      if (f.dateFrom && (!r.refundDate || r.refundDate < f.dateFrom)) return false;
+      if (f.dateTo && (!r.refundDate || r.refundDate > f.dateTo)) return false;
+      if (customerQuery && r.customerName.toLowerCase().indexOf(customerQuery) === -1) return false;
+      if (f.architect && r.architectName !== f.architect) return false;
+      if (f.salesperson && r.salesperson !== f.salesperson) return false;
+      if (f.reason && r.refundReason !== f.reason) return false;
+      return true;
+    });
+  }
+
+  function getSorted(list) {
+    var field = state.sortField, dir = state.sortDir;
+    var copy = list.slice();
+    copy.sort(function (a, b) {
+      var av = a[field], bv = b[field];
+      if (av === null || av === undefined || av === "") av = dir === "asc" ? Infinity : -Infinity;
+      if (bv === null || bv === undefined || bv === "") bv = dir === "asc" ? Infinity : -Infinity;
+      if (typeof av === "string") av = av.toLowerCase();
+      if (typeof bv === "string") bv = bv.toLowerCase();
+      if (av < bv) return dir === "asc" ? -1 : 1;
+      if (av > bv) return dir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return copy;
+  }
+
+  // =====================================================================
+  // רינדור
+  // =====================================================================
+  function render() {
+    var filtered = getFiltered();
+    var sorted = getSorted(filtered);
+
+    document.getElementById("kpiCount").textContent = new Intl.NumberFormat("he-IL").format(filtered.length);
+    document.getElementById("kpiCountNote").textContent = filtered.length === state.records.length
+      ? "מתוך " + state.records.length + " רשומות במערכת"
+      : "מתוך " + state.records.length + " רשומות (מסונן)";
+
+    var txnSum = filtered.reduce(function (s, r) { return s + (r.transactionAmount || 0); }, 0);
+    var refundSum = filtered.reduce(function (s, r) { return s + (r.refundAmount || 0); }, 0);
+    document.getElementById("kpiTxn").textContent = fmtCurrency(txnSum);
+    document.getElementById("kpiRefund").textContent = fmtCurrency(refundSum);
+    document.getElementById("kpiRefundNote").textContent = txnSum > 0
+      ? (Math.round((refundSum / txnSum) * 1000) / 10) + "% מסך העסקאות המסוננות"
+      : " ";
+
+    document.getElementById("filterSummary").textContent =
+      "מציג " + sorted.length + " מתוך " + state.records.length + " רשומות";
+
+    renderSortArrows();
+    renderTable(sorted);
+  }
+
+  function renderEmpty(message) {
+    document.getElementById("tbody").innerHTML =
+      '<tr><td colspan="10"><div class="empty-state">' + esc(message) + "</div></td></tr>";
+  }
+
+  function renderSortArrows() {
+    document.querySelectorAll("th[data-sort]").forEach(function (th) {
+      var field = th.getAttribute("data-sort");
+      var base = th.textContent.replace(/\s*[▲▼]$/, "");
+      th.textContent = base;
+      if (field === state.sortField) {
+        var arrow = document.createElement("span");
+        arrow.className = "arrow";
+        arrow.textContent = state.sortDir === "asc" ? "▲" : "▼";
+        th.appendChild(arrow);
+      }
+    });
+  }
+
+  function renderTable(list) {
+    var tbody = document.getElementById("tbody");
+    if (!state.dataReady) {
+      renderEmpty("טוען נתונים…");
+      return;
+    }
+    if (list.length === 0) {
+      renderEmpty(state.records.length === 0 ? "אין עדיין רשומות החזר במערכת. לחצו על “הוספת החזר חדש” כדי להתחיל." : "לא נמצאו רשומות התואמות לסינון.");
+      return;
+    }
+    var rows = list.map(function (r) {
+      if (state.editingId === r.id) return renderEditRow(r);
+      return renderRow(r);
+    });
+    tbody.innerHTML = rows.join("");
+    if (state.editingId) enhanceDateField("edit_refundDate");
+    tbody.querySelectorAll("[data-edit]").forEach(function (btn) {
+      btn.addEventListener("click", function () { state.editingId = btn.getAttribute("data-edit"); state.deletingId = null; render(); });
+    });
+    tbody.querySelectorAll("[data-cancel-edit]").forEach(function (btn) {
+      btn.addEventListener("click", function () { state.editingId = null; render(); });
+    });
+    tbody.querySelectorAll("[data-save-edit]").forEach(function (btn) {
+      btn.addEventListener("click", function () { saveEditRow(btn.getAttribute("data-save-edit")); });
+    });
+    tbody.querySelectorAll("[data-delete]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var id = btn.getAttribute("data-delete");
+        if (state.deletingId === id) { deleteRecord(id); }
+        else { state.deletingId = id; state.editingId = null; render(); }
+      });
+    });
+  }
+
+  function renderRow(r) {
+    var isConfirmingDelete = state.deletingId === r.id;
+    return (
+      "<tr>" +
+      '<td class="num">' + esc(r.customerCode || "—") + "</td>" +
+      "<td>" + esc(r.customerName || "—") + "</td>" +
+      '<td class="num">' + fmtCurrency(r.transactionAmount) + "</td>" +
+      "<td>" + esc(r.salesperson || "—") + "</td>" +
+      '<td class="num">' + fmtDate(r.refundDate) + "</td>" +
+      '<td class="num">' + fmtCurrency(r.refundAmount) + "</td>" +
+      "<td><span class=\"reason-pill\">" + esc(r.refundReason || "—") + "</span></td>" +
+      "<td>" + esc(r.architectName || "—") + "</td>" +
+      '<td class="notes">' + esc(r.notes || "—") + "</td>" +
+      '<td class="actions">' +
+      '<button class="btn ghost small" data-edit="' + r.id + '" type="button">עריכה</button> ' +
+      '<button class="btn ' + (isConfirmingDelete ? "danger" : "ghost") + ' small" data-delete="' + r.id + '" type="button">' +
+      (isConfirmingDelete ? "לאשר מחיקה?" : "מחיקה") +
+      "</button>" +
+      "</td>" +
+      "</tr>"
+    );
+  }
+
+  function renderEditRow(r) {
+    return (
+      '<tr class="row-edit">' +
+      '<td><input type="text" id="edit_customerCode" value="' + esc(r.customerCode) + '"></td>' +
+      '<td><input type="text" id="edit_customerName" value="' + esc(r.customerName) + '"></td>' +
+      '<td><input type="number" step="0.01" id="edit_transactionAmount" value="' + (r.transactionAmount === null ? "" : r.transactionAmount) + '"></td>' +
+      '<td><input type="text" id="edit_salesperson" value="' + esc(r.salesperson) + '" list="' + SALES_SUGGESTIONS_ID + '"></td>' +
+      '<td><input type="date" id="edit_refundDate" value="' + esc(r.refundDate) + '"></td>' +
+      '<td><input type="number" step="0.01" id="edit_refundAmount" value="' + (r.refundAmount === null ? "" : r.refundAmount) + '"></td>' +
+      '<td><input type="text" id="edit_refundReason" value="' + esc(r.refundReason) + '" list="' + REASON_SUGGESTIONS_ID + '"></td>' +
+      '<td><input type="text" id="edit_architectName" value="' + esc(r.architectName) + '" list="' + ARCHITECT_SUGGESTIONS_ID + '"></td>' +
+      '<td><input type="text" id="edit_notes" value="' + esc(r.notes) + '"></td>' +
+      '<td class="actions">' +
+      '<button class="btn primary small" data-save-edit="' + r.id + '" type="button">שמירה</button> ' +
+      '<button class="btn ghost small" data-cancel-edit="' + r.id + '" type="button">ביטול</button>' +
+      "</td>" +
+      "</tr>"
+    );
+  }
+
+  async function saveEditRow(id) {
+    var num = function (v) { v = (v || "").trim(); return v === "" ? null : Number(v); };
+    var payload = {
+      id: id,
+      customerCode: document.getElementById("edit_customerCode").value.trim(),
+      customerName: document.getElementById("edit_customerName").value.trim(),
+      transactionAmount: num(document.getElementById("edit_transactionAmount").value),
+      salesperson: document.getElementById("edit_salesperson").value.trim(),
+      refundDate: document.getElementById("edit_refundDate").value,
+      refundAmount: num(document.getElementById("edit_refundAmount").value),
+      refundReason: document.getElementById("edit_refundReason").value.trim(),
+      architectName: document.getElementById("edit_architectName").value.trim(),
+      notes: document.getElementById("edit_notes").value.trim()
+    };
+    var btn = document.querySelector('[data-save-edit="' + id + '"]');
+    if (btn) { btn.disabled = true; btn.textContent = "שומר…"; }
+    try {
+      var idx = await graphFindRowIndex(REFUNDS_TABLE, id);
+      if (idx === -1) throw new Error('row-not-found');
+      await graphUpdateRowAt(REFUNDS_TABLE, idx, objToRow(payload));
+      state.editingId = null;
+      await loadFromGraph();
+    } catch (e) {
+      console.error("update failed", e);
+      alertInline("שמירת השינויים נכשלה. נסו שוב.");
+      render();
+    }
+  }
+
+  async function deleteRecord(id) {
+    try {
+      var idx = await graphFindRowIndex(REFUNDS_TABLE, id);
+      if (idx === -1) throw new Error('row-not-found');
+      await graphDeleteRowAt(REFUNDS_TABLE, idx);
+      state.deletingId = null;
+      await loadFromGraph();
+    } catch (e) {
+      console.error("delete failed", e);
+      alertInline("מחיקת הרשומה נכשלה. נסו שוב.");
+      state.deletingId = null;
+      render();
+    }
+  }
+
+  function alertInline(msg) {
+    setStatus("err", msg);
+    setTimeout(function () { setStatus(state.dataReady ? "live" : "", state.dataReady ? "מחובר · נתונים משותפים לכל הצוות" : "מתחבר…"); }, 4000);
+  }
+
+  // =====================================================================
+  // סינון - חיווט אירועים
+  // =====================================================================
+  function wireFilters() {
+    document.getElementById("fDateFrom").addEventListener("change", function (e) { state.filters.dateFrom = e.target.value; render(); });
+    document.getElementById("fDateTo").addEventListener("change", function (e) { state.filters.dateTo = e.target.value; render(); });
+    document.getElementById("fCustomer").addEventListener("input", debounce(function (e) { state.filters.customer = e.target.value; render(); }, 180));
+    document.getElementById("fArchitect").addEventListener("change", function (e) { state.filters.architect = e.target.value; render(); });
+    document.getElementById("fSalesperson").addEventListener("change", function (e) { state.filters.salesperson = e.target.value; render(); });
+    document.getElementById("fReason").addEventListener("change", function (e) { state.filters.reason = e.target.value; render(); });
+    document.getElementById("clearFiltersBtn").addEventListener("click", function () {
+      state.filters = { dateFrom: "", dateTo: "", customer: "", architect: "", salesperson: "", reason: "" };
+      document.getElementById("fDateFrom").value = "";
+      document.getElementById("fDateTo").value = "";
+      document.getElementById("fCustomer").value = "";
+      document.getElementById("fArchitect").value = "";
+      document.getElementById("fSalesperson").value = "";
+      document.getElementById("fReason").value = "";
+      render();
+    });
+    document.querySelectorAll("th[data-sort]").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var field = th.getAttribute("data-sort");
+        if (state.sortField === field) { state.sortDir = state.sortDir === "asc" ? "desc" : "asc"; }
+        else { state.sortField = field; state.sortDir = "asc"; }
+        render();
+      });
+    });
+  }
+
+  function debounce(fn, wait) {
+    var t;
+    return function () {
+      var args = arguments, ctx = this;
+      clearTimeout(t);
+      t = setTimeout(function () { fn.apply(ctx, args); }, wait);
+    };
+  }
+
+  // =====================================================================
+  // מודאל הוספה
+  // =====================================================================
+  function openAddModal() {
+    var today = new Date().toISOString().slice(0, 10);
+    var html =
+      '<div class="modal-backdrop" id="addBackdrop">' +
+      '<div class="modal">' +
+      "<h2>הוספת החזר חדש</h2>" +
+      '<div class="modal-sub">כל השדות המסומנים ב-* הינם שדות חובה</div>' +
+      '<div class="modal-grid">' +
+      field("customerCode", "מס' לקוח", "text", "") +
+      field("customerName", "שם לקוח *", "text", "") +
+      field("transactionAmount", "סכום העסקה (₪)", "number", "") +
+      field("salesperson", "איש מכירות", "text", "", SALES_SUGGESTIONS_ID) +
+      field("refundDate", "תאריך החזר *", "date", today) +
+      field("refundAmount", "סכום להחזר (₪) *", "number", "") +
+      field("refundReason", "סיבת החזר *", "text", "", REASON_SUGGESTIONS_ID) +
+      field("architectName", "שם אדריכל", "text", "", ARCHITECT_SUGGESTIONS_ID) +
+      '<div class="field full"><label for="add_notes">הערות</label><textarea id="add_notes" rows="2"></textarea></div>' +
+      "</div>" +
+      '<div class="modal-actions">' +
+      '<button class="btn ghost" id="cancelAddBtn" type="button">ביטול</button>' +
+      '<button class="btn primary" id="saveAddBtn" type="button">שמירת רשומה</button>' +
+      "</div>" +
+      "</div>" +
+      "</div>";
+    document.getElementById("modalRoot").insertAdjacentHTML("beforeend", html);
+    enhanceDateField("add_refundDate");
+    document.getElementById("cancelAddBtn").addEventListener("click", closeAddModal);
+    document.getElementById("addBackdrop").addEventListener("click", function (e) { if (e.target.id === "addBackdrop") closeAddModal(); });
+    document.getElementById("saveAddBtn").addEventListener("click", submitAdd);
+  }
+
+  function field(id, label, type, value, listId) {
+    var listAttr = listId ? ' list="' + listId + '"' : "";
+    return (
+      '<div class="field" id="fieldwrap_' + id + '">' +
+      '<label for="add_' + id + '">' + esc(label) + "</label>" +
+      '<input type="' + type + '" id="add_' + id + '" value="' + esc(value) + '"' + listAttr + (type === "number" ? ' step="0.01"' : "") + ">" +
+      '<div class="field-err">שדה חובה</div>' +
+      "</div>"
+    );
+  }
+
+  function closeAddModal() {
+    var el = document.getElementById("addBackdrop");
+    if (el) el.remove();
+  }
+
+  function newRecordId() {
+    return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  async function submitAdd() {
+    var required = ["customerName", "refundDate", "refundAmount", "refundReason"];
+    var missing = false;
+    required.forEach(function (id) {
+      var input = document.getElementById("add_" + id);
+      var wrap = document.getElementById("fieldwrap_" + id);
+      if (!input.value.trim()) { wrap.classList.add("has-err"); missing = true; }
+      else wrap.classList.remove("has-err");
+    });
+    if (missing) return;
+
+    var num = function (v) { v = (v || "").trim(); return v === "" ? null : Number(v); };
+    var payload = {
+      id: newRecordId(),
+      customerCode: document.getElementById("add_customerCode").value.trim(),
+      customerName: document.getElementById("add_customerName").value.trim(),
+      transactionAmount: num(document.getElementById("add_transactionAmount").value),
+      salesperson: document.getElementById("add_salesperson").value.trim(),
+      refundDate: document.getElementById("add_refundDate").value,
+      refundAmount: num(document.getElementById("add_refundAmount").value),
+      refundReason: document.getElementById("add_refundReason").value.trim(),
+      architectName: document.getElementById("add_architectName").value.trim(),
+      notes: document.getElementById("add_notes").value.trim()
+    };
+    var btn = document.getElementById("saveAddBtn");
+    btn.disabled = true;
+    btn.textContent = "שומר…";
+    try {
+      await graphAddRow(REFUNDS_TABLE, objToRow(payload));
+      closeAddModal();
+      await loadFromGraph();
+    } catch (e) {
+      console.error("add failed", e);
+      btn.disabled = false;
+      btn.textContent = "שמירת רשומה";
+      alertInline("הוספת הרשומה נכשלה. נסו שוב.");
+    }
+  }
+
+  // =====================================================================
+  // שדה תאריך תמיד dd/mm/yyyy (לא תלוי בדפדפן/מערכת הפעלה)
+  // =====================================================================
+  function enhanceDateField(id) {
+    var native = document.getElementById(id);
+    if (!native || native.dataset.dateEnhanced) return;
+    native.dataset.dateEnhanced = '1';
+    var wrap = document.createElement('span');
+    wrap.className = 'date-field';
+    native.parentNode.insertBefore(wrap, native);
+    wrap.appendChild(native);
+    native.classList.add('date-native-proxy');
+    native.tabIndex = -1;
+
+    var display = document.createElement('input');
+    display.type = 'text'; display.className = 'date-display';
+    display.placeholder = 'dd/mm/yyyy'; display.inputMode = 'numeric';
+    display.autocomplete = 'off'; display.maxLength = 10;
+    wrap.appendChild(display);
+
+    var pickBtn = document.createElement('button');
+    pickBtn.type = 'button'; pickBtn.className = 'date-pick-btn';
+    pickBtn.setAttribute('aria-label', 'בחירת תאריך מלוח שנה');
+    pickBtn.textContent = '📅';
+    wrap.appendChild(pickBtn);
+
+    function isoToDisplay(iso) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? (m[3] + '/' + m[2] + '/' + m[1]) : ''; }
+    function displayToIso(t) { var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec((t || '').trim()); return m ? (m[3] + '-' + m[2] + '-' + m[1]) : ''; }
+    function syncFromNative() { display.value = isoToDisplay(native.value); }
+    syncFromNative();
+    native.addEventListener('change', syncFromNative);
+    native.addEventListener('input', syncFromNative);
+    try {
+      var d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+      Object.defineProperty(native, 'value', {
+        configurable: true,
+        get: function () { return d.get.call(native); },
+        set: function (v) { d.set.call(native, v); syncFromNative(); }
+      });
+    } catch (e) {}
+    display.addEventListener('input', function () {
+      var digits = display.value.replace(/\D/g, '').slice(0, 8);
+      var out = digits;
+      if (digits.length > 4) out = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
+      else if (digits.length > 2) out = digits.slice(0, 2) + '/' + digits.slice(2);
+      display.value = out;
+    });
+    function commit() {
+      var text = display.value.trim();
+      if (!text) { native.value = ''; native.dispatchEvent(new Event('change', { bubbles: true })); return; }
+      var iso = displayToIso(text);
+      if (iso) { native.value = iso; native.dispatchEvent(new Event('change', { bubbles: true })); }
+      else syncFromNative();
+    }
+    display.addEventListener('change', commit);
+    display.addEventListener('blur', commit);
+    pickBtn.addEventListener('click', function () {
+      if (typeof native.showPicker === 'function') { try { native.showPicker(); return; } catch (e) {} }
+      try { native.focus(); native.click(); } catch (e) {}
+    });
+  }
+
+  // =====================================================================
+  // Boot
+  // =====================================================================
+  function bindEvents() {
+    document.getElementById('btnSignIn').addEventListener('click', signInWithMicrosoft);
+    document.getElementById('btnSignOut').addEventListener('click', signOutMicrosoft);
+    fillDatalist(ARCHITECT_SUGGESTIONS_ID, []);
+    fillDatalist(SALES_SUGGESTIONS_ID, []);
+    fillDatalist(REASON_SUGGESTIONS_ID, []);
+    wireFilters();
+    enhanceDateField('fDateFrom');
+    enhanceDateField('fDateTo');
+    document.getElementById('openAddBtn').addEventListener('click', openAddModal);
+    render();
+  }
+
+  function boot() {
+    bindEvents();
+    init();
+  }
+
+  if (window.top !== window.self) {
+    // נטען בתוך iframe (למשל תצוגה מקדימה) - ההתחברות עם Microsoft תיכשל שם.
+    document.body.innerHTML = '<p style="padding:60px 20px;text-align:center;font-family:sans-serif;">יש לפתוח את הקישור בכרטיסייה נפרדת.</p>';
+  } else if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
